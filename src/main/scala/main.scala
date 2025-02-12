@@ -1,13 +1,16 @@
 package ru.prafdin.todolik
 
-import scala.util.{CommandLineParser, Try}
+import scala.util.CommandLineParser
 
 given CommandLineParser.FromString[Option[String]] with
     def fromString(value: String): Option[String] = Some(value)
 
 def parseTaskNum(args: Seq[String]): Int =
-    args.headOption.flatMap(a => Try(a.toInt).toOption)
-        .getOrElse(throw new IllegalStateException("Номер заметки должен быть числом"))
+    args.headOption.getOrElse(
+        throw new IllegalStateException("Необходимо указать номер заметки")
+    ).toIntOption.getOrElse(
+        throw new IllegalStateException("Номер заметки должен быть числом")
+    )
 
 @main
 def main(action: String, args: String*): Unit = action match
