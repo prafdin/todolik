@@ -1,9 +1,6 @@
 package ru.prafdin.todolik
 
-
-import io.circe._ // Базовые импорты
 import io.circe.generic.auto._ // Импорт авто-декодеров
-import io.circe.parser._ // Для decode
 import com.typesafe.config.ConfigFactory
 import io.circe.parser.decode
 
@@ -28,16 +25,14 @@ def main(action: String, args: String*): Unit =
         s.getLines().mkString
     }
 
-    val t = decode[Task](
-        rawJsonFromBd.getOrElse(throw IllegalStateException("Что-то пошло не так при чтении БД"))
-    )
-
-    println(t)
-
     action match
         case "list" =>
-            println("Will list tasks")
-
+            decode[List[Task]](
+                rawJsonFromBd.getOrElse(throw IllegalStateException("Что-то пошло не так при чтении БД"))
+            ).fold(
+                err => throw IllegalStateException("Ошибка при чтении списка задач"),
+                t => TaskTablePrinter().printTasks(t)
+            )
         case "create" =>
             val title = args.headOption.getOrElse(
                 throw new IllegalStateException("Необходимо передать название новой заметки")
