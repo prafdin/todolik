@@ -1,11 +1,15 @@
 package ru.prafdin.todolik
 
-import io.circe.generic.auto._ // Импорт авто-декодеров
+import io.circe.generic.auto.*
+import io.circe.syntax.*
 import com.typesafe.config.ConfigFactory
 import io.circe.parser.decode
+import ru.prafdin.todolik.utils.TempFile
 
-import scala.io.Source
-import scala.util.{CommandLineParser, Failure, Success, Using}
+import java.io.{BufferedWriter, FileWriter}
+import scala.io.{Source, StdIn}
+import scala.util.{CommandLineParser, Failure, Success, Try, Using}
+import scala.sys.process.*
 
 given CommandLineParser.FromString[Option[String]] with
     def fromString(value: String): Option[String] = Some(value)
@@ -25,20 +29,39 @@ def main(action: String, args: String*): Unit =
         s.getLines().mkString
     }
 
+    val tasks = decode[List[Task]](
+        rawJsonFromBd.getOrElse(throw IllegalStateException("Что-то пошло не так при чтении БД"))
+    ).fold(
+        err => throw IllegalStateException("Ошибка при чтении списка задач", err),
+        t => t
+    )
+
     action match
         case "list" =>
-            decode[List[Task]](
-                rawJsonFromBd.getOrElse(throw IllegalStateException("Что-то пошло не так при чтении БД"))
-            ).fold(
-                err => throw IllegalStateException("Ошибка при чтении списка задач"),
-                t => TaskTablePrinter().printTasks(t)
-            )
+            TaskTablePrinter().printTasks(tasks)
         case "create" =>
             val title = args.headOption.getOrElse(
                 throw new IllegalStateException("Необходимо передать название новой заметки")
             )
-            println(s"Will create new one with $title")
+            val editor = Try(config.getString("editor")).getOrElse("vi")
 
+            val taskDescription = Using(TempFile()) { f =>
+                val command = f"$editor ${f.getAbsolutePath()}"
+                val rc = command.run(BasicIO.standard(connectInput = true)).exitValue()
+                if (rc != 0) {
+                    throw new IllegalStateException(f"При попытке вызвать редактор получен return code = $rc")
+                }
+                f.read()
+            }.fold(
+                err => throw new IllegalStateException("Ошибка при попытке создании новой задачи", err),
+                taskDescription => taskDescription
+            )
+            Using(new BufferedWriter(new FileWriter(config.getString("dbPath")))) { writer =>
+                writer.write((Task(title, taskDescription) :: tasks).asJson.toString)
+            }.fold(
+                err => throw new IllegalStateException("Ошибка при записи данных", err),
+                _ => println("Задача успешно создана")
+            )
         case "delete" =>
             println(s"Will delete task number of ${parseTaskNum(args)}")
 
