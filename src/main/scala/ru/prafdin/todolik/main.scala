@@ -1,15 +1,15 @@
 package ru.prafdin.todolik
 
-import io.circe.generic.auto.*
-import io.circe.syntax.*
 import com.typesafe.config.ConfigFactory
+import io.circe.generic.auto.*
 import io.circe.parser.decode
+import io.circe.syntax.*
 import ru.prafdin.todolik.utils.TempFile
 
 import java.io.{BufferedWriter, FileWriter}
-import scala.io.{Source, StdIn}
-import scala.util.{CommandLineParser, Failure, Success, Try, Using}
+import scala.io.Source
 import scala.sys.process.*
+import scala.util.*
 
 given CommandLineParser.FromString[Option[String]] with
     def fromString(value: String): Option[String] = Some(value)
@@ -20,6 +20,12 @@ def parseTaskNum(args: Seq[String]): Int =
     ).toIntOption.getOrElse(
         throw new IllegalStateException("Номер заметки должен быть числом")
     )
+
+def writeTasksToDb(dbPath :String, tasks: List[Task]): Try[Unit] = {
+    Using(new BufferedWriter(new FileWriter(dbPath))) { writer =>
+        writer.write(tasks.asJson.toString)
+    }
+}
 
 @main
 def main(action: String, args: String*): Unit =
@@ -56,14 +62,22 @@ def main(action: String, args: String*): Unit =
                 err => throw new IllegalStateException("Ошибка при попытке создании новой задачи", err),
                 taskDescription => taskDescription
             )
-            Using(new BufferedWriter(new FileWriter(config.getString("dbPath")))) { writer =>
-                writer.write((Task(title, taskDescription) :: tasks).asJson.toString)
-            }.fold(
-                err => throw new IllegalStateException("Ошибка при записи данных", err),
-                _ => println("Задача успешно создана")
-            )
+
+            writeTasksToDb(config.getString("dbPath"), Task(title, taskDescription) :: tasks) match
+                case Failure(err) => throw new IllegalStateException("Ошибка при записи данных", err)
+                case Success(_) => println("Задача успешно создана")
+
         case "delete" =>
-            println(s"Will delete task number of ${parseTaskNum(args)}")
+            val taskNum = args.headOption
+                .flatMap(_.toIntOption)
+                .getOrElse(throw new IllegalStateException("Необходимо передать корректный номер заметки"))
+
+            Try(tasks(taskNum)).fold(
+                err => throw new IllegalStateException(f"Заметки по индексу $taskNum не найдено", err),
+                t => writeTasksToDb(config.getString("dbPath"), tasks.filterNot(_ == t))
+            ) match
+                case Failure(err) => throw new IllegalStateException("Ошибка при записи данных", err)
+                case Success(_) => println("Задача успешно удалена")
 
         case "update" =>
             println(s"Will update task number of ${parseTaskNum(args)}")
