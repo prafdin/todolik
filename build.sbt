@@ -12,6 +12,7 @@ val circleDependency = Seq(
 )
 
 lazy val root = (project in file("."))
+    .enablePlugins(JavaAppPackaging)
     .settings(
         name := "todolik",
         idePackagePrefix := Some("ru.prafdin.todolik"),

@@ -1,8 +1,9 @@
 package ru.prafdin.todolik.utils
 
-import scala.util.Using
 import java.io.File
 import java.nio.file.Files
+import scala.sys.process.*
+import scala.util.Using
 
 class TempFile(prefix: String = "temp", suffix: String = ".tmp") {
     val file: File = Files.createTempFile(prefix, suffix).toFile
@@ -21,6 +22,14 @@ object TempFile {
     implicit val tempFileReleasable: Using.Releasable[TempFile] = (resource: TempFile) => {
         if (resource.file.exists()) {
             resource.file.delete()
+        }
+    }
+
+    def edit(file: TempFile, editor: String): Unit = {
+        val command = f"$editor ${file.getAbsolutePath()}"
+        val rc = command.run(BasicIO.standard(connectInput = true)).exitValue()
+        if (rc != 0) {
+            throw new IllegalStateException(f"При попытке вызвать редактор получен return code = $rc")
         }
     }
 }

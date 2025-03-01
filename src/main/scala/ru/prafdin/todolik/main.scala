@@ -8,7 +8,6 @@ import ru.prafdin.todolik.utils.TempFile
 
 import java.io.{BufferedWriter, FileWriter}
 import scala.io.Source
-import scala.sys.process.*
 import scala.util.*
 
 given CommandLineParser.FromString[Option[String]] with
@@ -30,8 +29,10 @@ def writeTasksToDb(dbPath :String, tasks: List[Task]): Try[Unit] = {
 @main
 def main(action: String, args: String*): Unit =
     val config = ConfigFactory.load()
+    val editor = Try(config.getString("editor")).getOrElse("vi")
+    val dbPath = config.getString("dbPath")
 
-    val rawJsonFromBd = Using(Source.fromFile(config.getString("dbPath"))) { s =>
+    val rawJsonFromBd = Using(Source.fromFile(dbPath)) { s =>
         s.getLines().mkString
     }
 
@@ -52,18 +53,14 @@ def main(action: String, args: String*): Unit =
             val editor = Try(config.getString("editor")).getOrElse("vi")
 
             val taskDescription = Using(TempFile()) { f =>
-                val command = f"$editor ${f.getAbsolutePath()}"
-                val rc = command.run(BasicIO.standard(connectInput = true)).exitValue()
-                if (rc != 0) {
-                    throw new IllegalStateException(f"При попытке вызвать редактор получен return code = $rc")
-                }
+                TempFile.edit(f, editor)
                 f.read()
             }.fold(
                 err => throw new IllegalStateException("Ошибка при попытке создании новой задачи", err),
                 taskDescription => taskDescription
             )
 
-            writeTasksToDb(config.getString("dbPath"), Task(title, taskDescription) :: tasks) match
+            writeTasksToDb(dbPath, Task(title, taskDescription) :: tasks) match
                 case Failure(err) => throw new IllegalStateException("Ошибка при записи данных", err)
                 case Success(_) => println("Задача успешно создана")
 
@@ -74,13 +71,36 @@ def main(action: String, args: String*): Unit =
 
             Try(tasks(taskNum)).fold(
                 err => throw new IllegalStateException(f"Заметки по индексу $taskNum не найдено", err),
-                t => writeTasksToDb(config.getString("dbPath"), tasks.filterNot(_ == t))
+                t => writeTasksToDb(dbPath, tasks.filterNot(_ == t))
             ) match
                 case Failure(err) => throw new IllegalStateException("Ошибка при записи данных", err)
                 case Success(_) => println("Задача успешно удалена")
 
         case "update" =>
-            println(s"Will update task number of ${parseTaskNum(args)}")
+            val taskNum = args.headOption
+                .flatMap(_.toIntOption)
+                .getOrElse(throw new IllegalStateException("Необходимо передать корректный номер заметки"))
+
+            val task = Try(tasks(taskNum)).fold(
+                err => throw new IllegalStateException(f"Заметки по индексу $taskNum не найдено", err),
+                t => t
+            )
+
+            val newDescription = Using(TempFile()) { f =>
+                f.write(task.description)
+                TempFile.edit(f, editor)
+                f.read()
+            }.fold(
+                err => throw new IllegalStateException("Ошибка при попытке редактировании задачи", err),
+                taskDescription => taskDescription
+            )
+
+            writeTasksToDb(
+                dbPath,
+                tasks.updated(taskNum, task.copy(description = newDescription))
+            ) match
+                case Failure(err) => throw new IllegalStateException("Ошибка при записи данных", err)
+                case Success(_) => println("Задача успешно обновлена")
 
         case _ =>
             throw new IllegalArgumentException(s"Неизвестная команда: $action")
