@@ -1,5 +1,6 @@
 package ru.prafdin.todolik
 
+import com.jcabi.manifests.Manifests
 import com.typesafe.config.ConfigFactory
 import io.circe.generic.auto.*
 import io.circe.parser.decode
@@ -32,18 +33,23 @@ def main(action: String, args: String*): Unit =
     val editor = Try(config.getString("editor")).getOrElse("vi")
     val dbPath = config.getString("dbPath")
 
-    val rawJsonFromBd = Using(Source.fromFile(dbPath)) { s =>
+    lazy val rawJsonFromBd = Using(Source.fromFile(dbPath)) { s =>
         s.getLines().mkString
-    }
+    }.fold(
+        err => throw IllegalStateException("Что-то пошло не так при чтении БД", err),
+        t => t
+    )
 
-    val tasks = decode[List[Task]](
-        rawJsonFromBd.getOrElse(throw IllegalStateException("Что-то пошло не так при чтении БД"))
+    lazy val tasks = decode[List[Task]](
+        rawJsonFromBd
     ).fold(
         err => throw IllegalStateException("Ошибка при чтении списка задач", err),
         t => t
     )
 
     action match
+        case "version" =>
+            println(Try(Manifests.read("Todolik-Version")).getOrElse("Unknown version"))
         case "list" =>
             TaskTablePrinter().printTasks(tasks)
         case "create" =>
