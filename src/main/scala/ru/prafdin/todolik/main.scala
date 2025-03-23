@@ -8,6 +8,7 @@ import io.circe.syntax.*
 import ru.prafdin.todolik.utils.TempFile
 
 import java.io.{BufferedWriter, FileWriter}
+import java.nio.file.{Files, Path, Paths}
 import scala.io.Source
 import scala.util.*
 
@@ -21,31 +22,52 @@ def parseTaskNum(args: Seq[String]): Int =
         throw new IllegalStateException("Номер заметки должен быть числом")
     )
 
-def writeTasksToDb(dbPath :String, tasks: List[Task]): Try[Unit] = {
-    Using(new BufferedWriter(new FileWriter(dbPath))) { writer =>
+def writeTasksToDb(dbPath: Path, tasks: List[Task]): Try[Unit] = {
+    Using(new BufferedWriter(new FileWriter(dbPath.toFile))) { writer =>
         writer.write(tasks.asJson.toString)
     }
 }
 
 @main
 def main(action: String, args: String*): Unit =
-    val config = ConfigFactory.load()
-    val editor = Try(config.getString("editor")).getOrElse("vi")
-    val dbPath = config.getString("dbPath")
+    val configPath = Paths.get(System.getProperty("user.home"), ".config", "todolik", "todolik.conf")
 
-    lazy val rawJsonFromBd = Using(Source.fromFile(dbPath)) { s =>
-        s.getLines().mkString
-    }.fold(
-        err => throw IllegalStateException("Что-то пошло не так при чтении БД", err),
-        t => t
-    )
+    if (!Files.exists(configPath)) {
+        Files.createDirectories(configPath.getParent)
+        Option(this.getClass.getClassLoader.getResourceAsStream("todolik.conf")) match
+            case Some(inputStream) => Files.copy(
+                inputStream,
+                configPath
+            )
+            case None => throw new IllegalStateException("В приложении отсутствует ресурс todolik.conf")
+    }
+    val config = ConfigFactory.parseFile {
+        new java.io.File(configPath.toString)
+    }
 
-    lazy val tasks = decode[List[Task]](
-        rawJsonFromBd
-    ).fold(
-        err => throw IllegalStateException("Ошибка при чтении списка задач", err),
-        t => t
-    )
+    val editor = config.getString("editor")
+    val dbPath = Paths.get(config.getString("dbPath"))
+
+    lazy val rawJsonFromBd = {
+        if (!Files.exists(dbPath)) {
+            Files.createFile(dbPath)
+        }
+        Using(Source.fromFile(dbPath.toFile)) { s =>
+            s.getLines().mkString
+        }.fold(
+            err => throw IllegalStateException("Что-то пошло не так при чтении БД", err),
+            identity
+        )
+    }
+
+    lazy val tasks =
+        if (rawJsonFromBd.isEmpty) List.empty
+        else decode[List[Task]] {
+            rawJsonFromBd
+        }.fold(
+            err => throw new IllegalStateException("Ошибка при чтении списка задач", err),
+            identity
+        )
 
     action match
         case "version" =>
@@ -61,9 +83,9 @@ def main(action: String, args: String*): Unit =
             val taskDescription = Using(TempFile()) { f =>
                 TempFile.edit(f, editor)
                 f.read()
-            }.fold(
-                err => throw new IllegalStateException("Ошибка при попытке создании новой задачи", err),
-                taskDescription => taskDescription
+            }.fold(err =>
+                throw new IllegalStateException("Ошибка при попытке создании новой задачи", err),
+                identity
             )
 
             writeTasksToDb(dbPath, Task(title, taskDescription) :: tasks) match
@@ -87,18 +109,18 @@ def main(action: String, args: String*): Unit =
                 .flatMap(_.toIntOption)
                 .getOrElse(throw new IllegalStateException("Необходимо передать корректный номер заметки"))
 
-            val task = Try(tasks(taskNum)).fold(
-                err => throw new IllegalStateException(f"Заметки по индексу $taskNum не найдено", err),
-                t => t
+            val task = Try(tasks(taskNum)).fold(err =>
+                throw new IllegalStateException(f"Заметка по индексу $taskNum не найдена", err),
+                identity
             )
 
             val newDescription = Using(TempFile()) { f =>
                 f.write(task.description)
                 TempFile.edit(f, editor)
                 f.read()
-            }.fold(
-                err => throw new IllegalStateException("Ошибка при попытке редактировании задачи", err),
-                taskDescription => taskDescription
+            }.fold(err =>
+                throw new IllegalStateException("Ошибка при попытке редактировании задачи", err),
+                identity
             )
 
             writeTasksToDb(
