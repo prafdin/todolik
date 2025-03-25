@@ -19,7 +19,7 @@ packageOptions := Seq(
 ThisBuild / assemblyMergeStrategy := {
     case PathList("module-info.class") => MergeStrategy.discard
     case PathList("META-INF", "versions", xs@_, "module-info.class") => MergeStrategy.discard
-    case _ => MergeStrategy.first
+    case x => MergeStrategy.defaultMergeStrategy(x)
 }
 
 Debian / maintainer := "https://github.com/prafdin"

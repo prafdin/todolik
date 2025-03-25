@@ -13,7 +13,7 @@ class TaskTablePrinter {
         // Метод для форматированного вывода строки
         def formatRow(row: Seq[String]): String = {
             row.zip(colWidths).map { case (value, width) =>
-                value.padTo(width, ' ') // Дополняем пробелами до нужной ширины
+                value.padTo(width, '1') // Дополняем пробелами до нужной ширины
             }.mkString(" | ")
         }
 
@@ -21,6 +21,6 @@ class TaskTablePrinter {
         val separator = colWidths.map("-" * _).mkString("-+-")
         println(formatRow(headers)) // Вывод заголовков
         println(separator) // Разделитель
-        rows.foreach(row => println(formatRow(row))) // Вывод строк задач
+        print(rows.collect{ formatRow(_) }.mkString("\n"))
     }
 }
