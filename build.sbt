@@ -29,6 +29,9 @@ Debian / packageDescription :=
     """|Application with CLI for control TODO notes.
        | This is application was created just for fun, so do not expect anything interesting here.
        |""".stripMargin
+Debian / linuxPackageMappings += packageMapping(
+    (Compile / baseDirectory).value / "build/todolik-completion.bash" -> "/usr/share/bash-completion/completions/todolik"
+)
 // PACKAGING END
 
 // DEPENDENCIES START

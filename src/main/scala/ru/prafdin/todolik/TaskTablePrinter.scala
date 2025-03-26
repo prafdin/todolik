@@ -1,26 +1,25 @@
 package ru.prafdin.todolik
 
+import ru.prafdin.todolik.utils.TaskNumber
+
 class TaskTablePrinter {
     def printTasks(tasks: List[Task]): Unit = {
         val headers = Seq("№", "Название", "Описание")
         val rows = tasks.zipWithIndex.map { case (task, idx) =>
-            Seq(idx.toString, task.title, task.description)
+            Seq(TaskNumber.prepareTaskNumberForUser(idx), task.title, task.description.takeWhile(_ != '\n'))
         }
 
-        // Вычисляем максимальную ширину для каждого столбца
         val colWidths = (headers +: rows).transpose.map(_.map(_.length).max)
 
-        // Метод для форматированного вывода строки
         def formatRow(row: Seq[String]): String = {
             row.zip(colWidths).map { case (value, width) =>
-                value.padTo(width, '1') // Дополняем пробелами до нужной ширины
+                value.padTo(width, ' ')
             }.mkString(" | ")
         }
 
-        // Выводим таблицу
         val separator = colWidths.map("-" * _).mkString("-+-")
-        println(formatRow(headers)) // Вывод заголовков
-        println(separator) // Разделитель
-        print(rows.collect{ formatRow(_) }.mkString("\n"))
+        println(formatRow(headers))
+        println(separator)
+        println(rows.collect{ formatRow(_) }.mkString("\n"))
     }
 }

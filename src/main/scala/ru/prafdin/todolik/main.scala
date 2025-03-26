@@ -5,7 +5,7 @@ import com.typesafe.config.ConfigFactory
 import io.circe.generic.auto.*
 import io.circe.parser.decode
 import io.circe.syntax.*
-import ru.prafdin.todolik.utils.TempFile
+import ru.prafdin.todolik.utils.{TaskNumber, TempFile}
 
 import java.io.{BufferedWriter, FileWriter}
 import java.nio.file.{Files, Path, Paths}
@@ -93,8 +93,7 @@ def main(action: String, args: String*): Unit =
                 case Success(_) => println("Задача успешно создана")
 
         case "delete" =>
-            val taskNum = args.headOption
-                .flatMap(_.toIntOption)
+            val taskNum = TaskNumber.parseTaskNumberFromUser(args.headOption)
                 .getOrElse(throw new IllegalStateException("Необходимо передать корректный номер заметки"))
 
             Try(tasks(taskNum)).fold(
@@ -105,8 +104,7 @@ def main(action: String, args: String*): Unit =
                 case Success(_) => println("Задача успешно удалена")
 
         case "update" =>
-            val taskNum = args.headOption
-                .flatMap(_.toIntOption)
+            val taskNum = TaskNumber.parseTaskNumberFromUser(args.headOption)
                 .getOrElse(throw new IllegalStateException("Необходимо передать корректный номер заметки"))
 
             val task = Try(tasks(taskNum)).fold(err =>
